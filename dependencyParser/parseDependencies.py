@@ -3,6 +3,15 @@ import re
 import pdb
 import javalang
 
+complement = dict()
+complement["["] = "]"
+complement["]"] = "["
+complement["("] = ")"
+complement[")"] = "("
+complement["{"] = "}"
+complement["}"] = "{"
+complement[""] = ""
+
 def listJavaFiles(directory : str) -> list[str]:
     java_files_list = []
 
@@ -136,33 +145,50 @@ class JavaMethod:
         self.signature = ms[:ms.find("{")]
         self.fxnbody = ms[ms.find("{")+1:-1]
 
-        # TODO split
         self.bodyLines = []
         buff = ""
-        paranLevel = 0
+        #paranLevel = 0
         remainder = self.fxnbody
+        seekstack = [] # Keep track of []{}()''""
         while remainder != "":
             S = remainder.find(";")
-            if paranLevel != 0:
+            if len(seekstack) != 0:
                 S = 1e10
-            L = remainder.find("{")
-            R = remainder.find("}")
-            m = min(L,R,S)
-            if m == -1:
-                m = min (max(L,R),max(S,R),max(S,L))
-                if m == -1:
-                    m = max(S,L,R)
-                    if m == -1:
+            rgx = re.search("[\{\}\[\]\(\)'\"\\\\]", remainder)
+            if rgx is None:
+                R = -1
+            else:
+                R = rgx.start()
+            m = min(S,R)
+            if m==-1:
+                m = max(S,R)
+                if m==-1:
+                        assert(remainder.strip()=="")
                         break
-            if m == L:
-                paranLevel += 1
-            if m == R:
-                paranLevel -= 1
             
             buff = buff + remainder[:m+1]
             remainder = remainder[m+1:]
             
-            if paranLevel == 0 and m == S:
+            if m == R:
+               c = buff[-1] 
+               l = seekstack[-1] if len(seekstack)>0 else ""
+
+
+               if l == "'" or l == '"':
+                   if c == "\\":
+                       buff = buff + remainder[0]
+                       remainder = remainder[1:]
+                   elif c==l:
+                        seekstack.pop()
+               elif c==complement[l]:
+                    seekstack.pop()
+               else:
+                   seekstack.append(c)               
+
+            if m == S and len(seekstack)==0:
+                self.bodyLines.append(buff)
+                buff = ""
+            if m == R and buff[-1]=="}" and len(seekstack)==0:
                 self.bodyLines.append(buff)
                 buff = ""
          
@@ -223,36 +249,49 @@ class JavaClass:
         methodStrs = []
         self.fieldAssigns = []
         buff = ""
-        paranLevel = 0
+        #paranLevel = 0
+        seekstack = []
         i = 0
         while remainder != "":
             S = remainder.find(";")
-            if paranLevel != 0:
-                S = 1e10
-            L = remainder.find("{")
-            R = remainder.find("}")
-            m = min(L,R,S)
+            if len(seekstack) != "":
+                S = -1
+            rgx = re.search("[\{\}\(\)\[\]'\"\\\\]", remainder)
+            if rgx is None:
+                R = -1
+            else:
+                R = rgx.start()
+            m = min(S,R)
             if m == -1:
-                m = min (max(L,R),max(S,R),max(S,L))
+                m = max(S,R)
                 if m == -1:
-                    m = max(S,L,R)
-                    if m == -1:
+                        assert(remainder.strip()=="")
                         break
-                        #buff = buff + remainder
-                        #classStrs.append(classbuffer)
-            if m == L:
-                paranLevel += 1
-            if m == R:
-                paranLevel -= 1
-            
+
             buff = buff + remainder[:m+1]
             remainder = remainder[m+1:]
             
-            if paranLevel == 0 and m == R and buff[-1]=="}":
+            if m==R:
+                c = buff[-1]
+                l = seekstack[-1] if len(seekstack)>0 else ""
+
+
+                if l == "'" or l == '"':
+                    if c == "\\":
+                        buff =buff + remainder[0]
+                        remainder = remainder[1:]
+                    elif c==l:
+                        seekstack.pop()
+                elif c==complement[l]:
+                    seekstack.pop()
+                else:
+                    seekstack.append(c)
+
+            if m == R and buff[-1]=="}" and len(seekstack)==0:
                 methodStrs.append((buff,self.AST.body[i]))
                 buff = ""
                 i += 1
-            if paranLevel == 0 and m == S:
+            if m == S and len(seekstack)==0:
                 self.fieldAssigns.append((buff,self.AST.body[i]))
                 buff = ""
                 i += 1
@@ -378,26 +417,38 @@ class JavaFile:
         # DETECT CLASS BOUNDARIES #TODO not really verified
         classbuffer = ""
         remainder = postheader
-        paranLevel = 0
+        seekstack = []
         classStrs = []
         while remainder != "":
-            L = remainder.find("{")
-            R = remainder.find("}")
-            m = min(L,R)
+            rgx = re.search("[\[\]\{\}\(\)'\"\\\\]", remainder)
+            m = rgx.start()
+            if rgx is None:
+                m = -1
             if m == -1:
-                m = max(L,R)
-                if m == -1:
-                    break
+                        assert(remainder.strip()=="")
+                        break
                     #classbuffer = classbuffer + remainder
                     #classStrs.append(classbuffer)
-            if m == L:
-                paranLevel += 1
-            else:
-                paranLevel -= 1
             classbuffer = classbuffer + remainder[:m+1]
             remainder = remainder[m+1:]
+           
+            if True:
+                c = classbuffer[-1]
+                l = seekstack[-1] if len(seekstack)>0 else ""
+
+                if l == "'" or l == '"':
+                    if c == "\\":
+                        classbuffer = classbuffer + remainder[0]
+                        remainder = remainder[1:]
+                    elif c==l:
+                        seekstack.pop()
+                elif c==complement[l]:
+                    seekstack.pop()
+                else:
+                    seekstack.append(c)
             
-            if paranLevel == 0:
+
+            if len(seekstack)==0 and classbuffer[-1]=="}":
                 classStrs.append(classbuffer)
                 classbuffer = ""
 
@@ -411,6 +462,8 @@ class JavaFile:
         for i, cs in enumerate(classStrs):
             self.classes.append(JavaClass(self.linebuffer, self.cleanbuffer, cs))#, dirtyCSs[i])
         self.deps = set()
+
+        print("instances created")
 
     def gatherDeps(self):
         print("deps gathering for ", self.filepath)
