@@ -124,11 +124,11 @@ class DepGL:
         pass
         #TODO
 
-    def attempt_resolve():  # No return
+    def attempt_resolve(self):  # No return
         pass
         #TODO
 
-    def force_resolve():  # Returns  a list
+    def force_resolve(self):  # Returns  a list
         #TODO
         return list()
 
@@ -374,6 +374,7 @@ class JavaClass:
                 self.deps.add((token, "Class"))
             if not inSign and token == "extends":
                 inSign = True"""
+        self.extension = ""
         if self.AST.extends is not None:
             for _, node in self.AST.extends.filter(javalang.tree.ReferenceType):
                 self.extension = Extends(node.name)
@@ -412,7 +413,8 @@ class JavaClass:
         DGL = DepGL()
         deps = set()
         deps |= self.faDeps
-        deps.add(self.extension)
+        if self.extension != "":
+            deps.add(self.extension)
         DGL.register_class(self.getClassName(), deps)
         for m in self.methods:
             DGL.addDGL(m.constructDGL())
