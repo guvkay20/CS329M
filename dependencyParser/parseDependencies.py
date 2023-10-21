@@ -102,6 +102,38 @@ class Extends:
     def __init__(self, extensionClass):
         self.extends = extensionClass
 
+class DepGL:
+    def __init__(self):
+        self.PL = list()
+        self.PDG = dict()
+        self.DGLMode = "topLevel"
+
+    def register_method(self, methodName, deps): 
+        pass
+        #TODO
+
+    def register_class(self, className, deps):
+        pass
+        #TODO
+
+    def register_file(self, pkgName, filePath):
+        pass
+        #TODO
+
+    def addDGL(self, other):
+        pass
+        #TODO
+
+    def attempt_resolve():  # No return
+        pass
+        #TODO
+
+    def force_resolve():  # Returns  a list
+        #TODO
+        return list()
+
+    #TODO need a way of learning hierarchy, registering something should give the added ones that prefix
+    
 def gatherCalls(line, tree, context, fieldDeclaration=False):
     # Removes left hand of assignment
     #rgx = re.search("(^|[^=])=($|[^=])", line)
@@ -239,6 +271,14 @@ class JavaMethod:
 
         return self.deps
 
+    def getMethodName(self):
+        return self.AST.name
+
+    def constructDGL(self):
+        DGL = DepGL()
+        DGL.register_method(self.getMethodName(), self.deps)
+        DGL.attempt_resolve()
+        return DGL
 
 class JavaClass:
     def __init__(self, lbf, cbf, cs): # Line buffer, cleaned buffer (aligned with line buffer), and cleaned class string # TODO later dcs
@@ -336,11 +376,14 @@ class JavaClass:
                 inSign = True"""
         if self.AST.extends is not None:
             for _, node in self.AST.extends.filter(javalang.tree.ReferenceType):
-                self.deps.add(Extends(node.name))
+                self.extension = Extends(node.name)
+                self.deps.add(self.extension)
 
         # PART 2, FIELD ASSIGNS
+        self.faDeps = set()
         for fa in self.fieldAssigns:
-            self.deps |= set(gatherCalls(fa[0], fa[1], self.cleaned_cs, fieldDeclaration = True))
+            self.faDeps |= set(gatherCalls(fa[0], fa[1], self.cleaned_cs, fieldDeclaration = True))
+        self.deps |= self.faDeps
 
         # PART 3, METHODS
         for m in self.methods:
@@ -361,6 +404,20 @@ class JavaClass:
 
         #  predicateless methods are of this class, note it down or bear in mind for graph construction
         return self.stripSelfRefs(self.deps)
+
+    def getClassName(self):
+        return self.AST.name
+
+    def constructDGL(self):
+        DGL = DepGL()
+        deps = set()
+        deps |= self.faDeps
+        deps.add(self.extension)
+        DGL.register_class(self.getClassName(), deps)
+        for m in self.methods:
+            DGL.addDGL(m.constructDGL())
+        DGL.attempt_resolve()
+        return DGL
 
 # Assumes a degree of good formatting
 class JavaFile:
@@ -486,6 +543,26 @@ class JavaFile:
 
         return self.deps
 
+    def constructDGL(self):
+        DGL = DepGL()
+        DGL.register_file(self.packageName, self.filepath)
+        for c in self.classes:
+            DGL.addDGL(c.constructDGL())
+        DGL.attempt_resolve()
+        return DGL
+
+def constructDep(files):
+    # We want to have a list of JavaFiles, JavaClasses, and JavaMethods
+    # At each level, we want a partial list of all of the applicable ones, alongside a dictionary listing remaining deps
+    # We will process at each level all orderable deps at that level, yielding up only what we cannot resolve
+    # At top level, we will try to resolve what we can, but will go the heuristic route if we cannot
+
+    DGL = DepGL()
+    for file in files:
+        DGL.addDGL(file.constructDGL())
+    DGL.attempt_resolve()
+    return DGL.force_resolve()
+
 def parseDependencies():
     # Generate List of Java files
     javaList = listJavaFiles("tmp")
@@ -495,10 +572,12 @@ def parseDependencies():
     [jf.gatherDeps() for jf in files]
 
     # Construct graph of dependencies, including external ones
-
     # (Retrieve external dependencies' comments, if available)
     # Create traversal order for dependencies, keep in mind inheritances and calls (calls include field assignments and in-method calls)
+    dependencyList = constructDep(files)
+    return dependencyList
+
 
 if __name__ == "__main__":
     #pdb.set_trace()
-    parseDependencies()
+    print(parseDependencies())
