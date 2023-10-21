@@ -28,7 +28,6 @@ def ls(rem : re.Match) -> list[int]:
     return [int(m.start()) for m in rem]
 
 def javaClean(f):
-        #pdb.set_trace()
         linebuffer = []
         commentlessbuffer = []
         paranLevel = 0
@@ -51,7 +50,7 @@ def javaClean(f):
             """
             beginMLCs = ls(re.finditer("/\*", line))
             endMLCs = ls(re.finditer("\*/", line))
-            beginSLCs = ls(re.finditer("/?=/", line))
+            beginSLCs = ls(re.finditer("//", line))
             i = 0
             j = 0
             k = 0
@@ -189,7 +188,13 @@ class JavaMethod:
                 self.bodyLines.append(buff)
                 buff = ""
             if m == R and buff[-1]=="}" and len(seekstack)==0:
-                self.bodyLines.append(buff)
+
+                if len(self.bodyLines)>0 and self.bodyLines[-1].strip().split()[0]=="do" and buff.strip().split()[0]=="while" and buff[-1]==";": # Append up (do-)while
+                    self.bodyLines[-1] = self.bodyLines[-1] + buff
+                elif len(self.bodyLines)>0 and self.bodyLines[-1].strip().split()[0]=="if" and buff.strip().split()[0]=="else": #Append up (if-)else[if-else...]
+                    self.bodyLines[-1] = self.bodyLines[-1] + buff
+                else:
+                    self.bodyLines.append(buff)
                 buff = ""
          
 
@@ -201,8 +206,11 @@ class JavaMethod:
         
         methodLocalVars = dict()
         for i, bl in enumerate(self.bodyLines):
-            lineDeps = gatherCalls(bl, self.AST.body[i], self.cleaned_ms)
-            
+            try:
+                lineDeps = gatherCalls(bl, self.AST.body[i], self.cleaned_ms)
+            except:
+                pdb.set_trace()
+
             """ THAT IS NO EXCUSE, THEY ARE STILL DEPENDENT
             # If methods are not of something, they must be of self. If so, remove them from deps
             newDeps = set()
@@ -217,7 +225,7 @@ class JavaMethod:
             for dep in lineDeps:
                 if not dep.hasContext:
                     if dep.methodOf.split(".")[0] in methodLocalVars.keys():
-                        dep.contextualize(methodLocalVars[dep.MethodOf.split(".")[0]])
+                        dep.contextualize(methodLocalVars[dep.methodOf.split(".")[0]])
 
             # Update that context list
             if isinstance(self.AST.body[i], javalang.tree.LocalVariableDeclaration):
@@ -234,6 +242,8 @@ class JavaMethod:
 
 class JavaClass:
     def __init__(self, lbf, cbf, cs): # Line buffer, cleaned buffer (aligned with line buffer), and cleaned class string # TODO later dcs
+        #pdb.set_trace()
+
         cs = cs.strip()
         self.cleaned_cs = cs
         self.AST = javalang.parse.parse(cs).types[0]
@@ -254,7 +264,7 @@ class JavaClass:
         i = 0
         while remainder != "":
             S = remainder.find(";")
-            if len(seekstack) != "":
+            if len(seekstack) != 0:
                 S = -1
             rgx = re.search("[\{\}\(\)\[\]'\"\\\\]", remainder)
             if rgx is None:
