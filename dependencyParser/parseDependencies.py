@@ -98,39 +98,62 @@ class MethodCall:
         self.methodOfBaseType = methodOfBaseType
         self.hasContext = True
 
-class Extends:
-    def __init__(self, extensionClass):
-        self.extends = extensionClass
+class ClassDep:
+    def __init__(self, c_lass):
+        self.clas = c_lass
 
 class DepGL:
     def __init__(self):
         self.PL = list()
         self.PDG = dict()
-        self.DGLMode = "topLevel"
+        self.DGLMode = "master"
 
-    def register_method(self, methodName, deps): 
-        pass
-        #TODO
+    def register_method(self, jm, deps): 
+        self.DGLMode = "method"
+        self.PDG[jm] = deps
 
-    def register_class(self, className, deps):
-        pass
-        #TODO
+    def register_class(self, jc, deps):
+        self.DGLMode = "class"
+        self.PDG[jc] = deps
 
-    def register_file(self, pkgName, filePath):
-        pass
-        #TODO
+    def register_file(self, jf, deps):
+        self.DGLMode = "file"
+        self.PDG[pkgName] = deps
 
     def addDGL(self, other):
+        pdb.set_trace()
         pass
-        #TODO
+        #TODO, how to merge PLs and PDGs (appending is not enough, prefixes must be altered, see note below)
 
-    def attempt_resolve(self):  # No return
+    def attempt_resolve(self):  # TODO this manner of comparison, see note below
+        progress = True
+        while progress:
+            resolved = set(self.PL)
+            torem = list()
+            progress = False
+            for dependee, deps in self.PDG.items():
+                dd = list(deps)
+                flag = True
+                for d in dd:
+                    if d not in resolved:
+                        flag = False
+                        break
+                if flag:
+                    progress = True
+                    resolved.add(dependee)
+                    self.PL.append(dependee)
+                    torem.append(dependee)
+            for tr in torem:
+                del self.PDG[tr]
+
+        pdb.set_trace()
         pass
-        #TODO
 
-    def force_resolve(self):  # Returns  a list
-        #TODO
-        return list()
+    def force_resolve(self):  
+        pdb.set_trace()
+        #TODO; force empty into PL; figure out a good heuristic for it
+        # Cycles should be detected and broken up at "random" point (heuristic for least distruption)
+        return self.PL
 
     #TODO need a way of learning hierarchy, registering something should give the added ones that prefix
     
@@ -276,7 +299,7 @@ class JavaMethod:
 
     def constructDGL(self):
         DGL = DepGL()
-        DGL.register_method(self.getMethodName(), self.deps)
+        DGL.register_method(self, self.deps)
         DGL.attempt_resolve()
         return DGL
 
@@ -377,7 +400,7 @@ class JavaClass:
         self.extension = ""
         if self.AST.extends is not None:
             for _, node in self.AST.extends.filter(javalang.tree.ReferenceType):
-                self.extension = Extends(node.name)
+                self.extension = ClassDep(node.name)
                 self.deps.add(self.extension)
 
         # PART 2, FIELD ASSIGNS
@@ -415,7 +438,7 @@ class JavaClass:
         deps |= self.faDeps
         if self.extension != "":
             deps.add(self.extension)
-        DGL.register_class(self.getClassName(), deps)
+        DGL.register_class(self, deps)
         for m in self.methods:
             DGL.addDGL(m.constructDGL())
         DGL.attempt_resolve()
@@ -547,7 +570,10 @@ class JavaFile:
 
     def constructDGL(self):
         DGL = DepGL()
-        DGL.register_file(self.packageName, self.filepath)
+        deps = set()
+        for c in self.classes:
+            deps.add(ClassDep(c.getClassName()))
+        DGL.register_file(self, deps)
         for c in self.classes:
             DGL.addDGL(c.constructDGL())
         DGL.attempt_resolve()
