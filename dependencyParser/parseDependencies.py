@@ -299,7 +299,7 @@ class DepGL:
                     self.PDG[dependee].remove(rlm)
         self.attempt_resolve()
         
-        pdb.set_trace()
+        #pdb.set_trace()
 
         #TODO; force empty into PL; figure out a good heuristic for it
         # Cycles should be detected and broken up at "random" point (heuristic for least distruption)
@@ -425,10 +425,10 @@ class JavaMethod:
                 methodLocalVars[formalParameter.name] = formalParameter.type
 
         for i, bl in enumerate(self.bodyLines):
-            try:
-                lineDeps = gatherCalls(bl, self.AST.body[i], self.cleaned_ms)
-            except:
-                pdb.set_trace()
+            #try:
+            lineDeps = gatherCalls(bl, self.AST.body[i], self.cleaned_ms)
+            #except:
+            #pdb.set_trace()
 
             """ THAT IS NO EXCUSE, THEY ARE STILL DEPENDENT
             # If methods are not of something, they must be of self. If so, remove them from deps
@@ -610,8 +610,8 @@ class JavaClass:
             prelen = len(m.deps)
             m.deps = m.deps - depsToRemoveFromMethods
             if len(m.deps) != prelen:
-                if self.extension =="":
-                    pdb.set_trace()
+                #if self.extension =="":
+                    #pdb.set_trace()
                 m.deps.add(self.extension)
 
         # 2) Do not pass to file any internal methods' dependencies
@@ -784,7 +784,7 @@ def constructDep(files):
     # We will process at each level all orderable deps at that level, yielding up only what we cannot resolve
     # At top level, we will try to resolve what we can, but will go the heuristic route if we cannot
 
-    pdb.set_trace()
+    #pdb.set_trace()
     DGL = DepGL()
     for file in files:
         DGL.addDGL(file.constructDGL())
