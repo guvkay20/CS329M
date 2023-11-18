@@ -99,6 +99,7 @@ class MethodCall:
 
     def contextualize(self, methodOfBaseType):
         self.methodOfBaseType = methodOfBaseType
+        self.methodOf = methodOfBaseType.name
         self.hasContext = True
 
     def __repr__(self):
@@ -134,7 +135,12 @@ class DepGL:
 
     def register_method(self, jm, deps): 
         self.DGLMode = "method"
-        jm.selfname = jm.getMethodName()
+        if "updateLevel" not in dir(jm) or jm.updateLevel == "method":
+            jm.selfname = jm.getMethodName()
+        for dep in deps:
+            if "updateLevel" not in dir(dep):
+                dep.updateLevel = "method"
+
         self.PDG[jm] = deps
 
     def register_class(self, jc, deps):
@@ -144,7 +150,12 @@ class DepGL:
         for dep in deps:
             if isinstance(dep, ClassDep):
                 dep.selfname = dep.clas
-            
+            if "updateLevel" not in dir(dep) or dep.updateLevel == "method":
+                dep.updateLevel = "class"
+            if isinstance(dep, JavaMethod):
+                 dep.selfname = self.prefix +"."+ dep.getMethodName()
+               
+
         self.PDG[jc] = deps
 
     def register_file(self, jf, deps):
@@ -152,42 +163,65 @@ class DepGL:
         self.prefix = jf.packageName
         jf.selfname = jf.packageName
         self.file = jf
+        jf.updateLevel = "file"
         for dep in deps:
             if isinstance(dep, JavaClass):
                 dep.selfname = self.prefix+"."+dep.getClassName()
             if isinstance(dep, ClassImp):
                 dep.selfname = dep.clas
+            dep.updateLevel = "file"
         self.PDG[jf] = deps
 
     def addDGL(self, other):
         #pdb.set_trace()
-        
+        if self.DGLMode=="file":
+            impSuffixes = [imp.split(".")[-1] for imp in self.file.imports]       
+            impSuffixes.extend(["Math","String"])
+            #self.imports.extend(["java.lang.Math","java.lang.String"])
         # Merge other's PL onto self; for that end, append self name to their starts
         for el in other.PL:
-            el.selfname = self.prefix+"."+el.selfname if self.prefix!="" else el.selfname
+            if el.updateLevel != self.DGLMode:
+                el.selfname = self.prefix+"."+el.selfname if self.prefix!="" else el.selfname
+            el.updateLevel = self.DGLMode
             self.PL.append(el)
 
         # Merge other's PDG onto self; do the same for their dpees and deps alike
         # TODO
         for dependee, deps in other.PDG.items():
-            dependee.selfname = self.prefix+"."+dependee.selfname if self.prefix!= "" else dependee.selfname
+            #if dependee.selfname.split(".")[-1]=="onMeasure":
+            #    pdb.set_trace()
+            if dependee.updateLevel != self.DGLMode:
+                dependee.selfname = self.prefix+"."+dependee.selfname if self.prefix!= "" else dependee.selfname
+                dependee.updateLevel = self.DGLMode
             new_deps = set()
             for dep in deps:
-                if isinstance(dep, ClassImp):
-                    dep.selfname = dep.selfname
-                elif isinstance(dep, MethodCall) and "selfname" not in dir(dep):
-                        if dep.methodOf is None or dep.methodOf=="":
-                            dep.selfname = (self.prefix+"."+dep.methodName) if self.prefix != "" else dep.methodName
-                        else:
-                            dep.selfname = dep.methodOf + "." +  dep.methodName
-                elif isinstance(dep, ClassDep) and self.DGLMode=="file" and (dep.selfname in [imp.split(".")[-1] for imp in self.file.imports]):
-                    dep = self.imports[[imp.split(".")[-1] for imp in self.file.imports].index(dep.selfname)]
-                else:
-                    try:
-                        dep.selfname = (self.prefix+"."+dep.selfname) if self.prefix != "" else dep.selfname
-                    except:
-                        pdb.set_trace()
-                new_deps.add(dep)
+                if dep.updateLevel != self.DGLMode:
+                    if isinstance(dep, ClassImp):
+                        dep.selfname = dep.selfname
+                    elif isinstance(dep, MethodCall) and "selfname" not in dir(dep):
+                            if dep.methodOf is None or dep.methodOf=="":
+                                dep.selfname = (self.prefix+"."+dep.methodName) if self.prefix != "" else dep.methodName
+                            else:
+                                dep.selfname = dep.methodOf + "." +  dep.methodName
+                    elif isinstance(dep, ClassDep) and self.DGLMode=="file" and (dep.selfname in impSuffixes):
+                        try:
+                            dep = self.imports[impSuffixes.index(dep.selfname)]
+                        except:
+                            dep = -1
+                    else:
+                        try:
+                            if self.DGLMode=="file" and isinstance(dep, MethodCall) and isinstance(dep.methodOf, str) and (0 < len(dep.methodOf.split("."))) and (dep.methodOf.split(".")[0] in impSuffixes):
+                                try:
+                                    dep = self.imports[impSuffixes.index(dep.methodOf.split(".")[0])]             
+                                except:
+                                    dep = -1
+                            else:
+                                dep.selfname = (self.prefix+"."+dep.selfname) if self.prefix != "" else dep.selfname
+                        except:
+                            pdb.set_trace()
+                if dep !=-1:
+                    dep.updateLevel = self.DGLMode
+                    new_deps.add(dep)
             self.PDG[dependee] = new_deps
 
         #TODO, how to merge PLs and PDGs (appending is not enough, prefixes must be altered, see note below)
@@ -196,16 +230,22 @@ class DepGL:
         #pdb.set_trace()
         progress = True
         while progress:
-            resolved = set(self.PL)
+            resolved = set([it.selfname for it in self.PL])
             torem = list()
             progress = False
             for dependee, deps in self.PDG.items():
+                #if isinstance(dependee, JavaClass) and dependee.selfname == "PageIndicatorView":
+                #    pdb.set_trace()
+                #if isinstance(dependee, JavaMethod) and dependee.selfname.split(".")[-1] == "PageRecyclerView":
+                #    pdb.set_trace()
+             
                 dd = list(deps)
                 flag = True
                 for d in dd:
-                    if d not in resolved:
+                    if not (d in self.PL or ("selfname" in dir(d) and d.selfname in resolved)):
                         flag = False
-                        break
+                    else:
+                        deps.remove(d)
                 if flag:
                     progress = True
                     resolved.add(dependee)
@@ -248,6 +288,17 @@ class DepGL:
             self.PDG[dependee] = newdeps
         self.attempt_resolve()
 
+        # STEP -1 Heuristic by forcing resolution of methods' methodcall dependencies as they are likely result of hard concepts like member subclasses and inherited methods of other packages that are simply very difficult to resolve
+        for dependee, deps in self.PDG.items():
+            if isinstance(dependee, JavaMethod):
+                removelist = list()
+                for dep in deps:
+                    if isinstance(dep, MethodCall):
+                        removelist.append(dep)
+                for rlm in removelist:
+                    self.PDG[dependee].remove(rlm)
+        self.attempt_resolve()
+        
         pdb.set_trace()
 
         #TODO; force empty into PL; figure out a good heuristic for it
@@ -283,6 +334,8 @@ def gatherCalls(line, tree, context, fieldDeclaration=False):
                     break # context limit reached at this level
                 if isinstance(node, javalang.tree.VariableDeclarator):
                     if c.methodOf is not None:
+                        #if c.methodOf == "context":
+                        #    pdb.set_trace()
                         if node.name == c.methodOf.split(".")[0]:
                             c.contextualize(path[-2].type)
         ret.add(c)
@@ -367,6 +420,10 @@ class JavaMethod:
         #    pdb.set_trace()
         
         methodLocalVars = dict()
+        if isinstance(self.AST, javalang.tree.MethodDeclaration): # TODO class subclasses really shouldn't fall here
+            for formalParameter in self.AST.parameters:
+                methodLocalVars[formalParameter.name] = formalParameter.type
+
         for i, bl in enumerate(self.bodyLines):
             try:
                 lineDeps = gatherCalls(bl, self.AST.body[i], self.cleaned_ms)
