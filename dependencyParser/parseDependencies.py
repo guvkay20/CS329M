@@ -91,41 +91,109 @@ class MethodCall:
         self.methodOf = methodOf
         self.methodIn = methodIn # Not currently used
         self.hasContext = False
+        self.isOfClass = False
+        
         if (methodOf is None) or (methodOf == ""):
             self.hasContext = True
+            self.isOfClass = True
 
     def contextualize(self, methodOfBaseType):
         self.methodOfBaseType = methodOfBaseType
         self.hasContext = True
 
+    def __repr__(self):
+        return "MethodCall("+self.selfname+")"
+
+## ClassDep is for extends; ClassImp is for imports (and extends mapped to them); ClassInc is for files>class hierarchy
 class ClassDep:
     def __init__(self, c_lass):
         self.clas = c_lass
+    def __repr__(self):
+        return "ClassDep("+self.selfname+")"
+class ClassImp:
+    def __init__(self, c_lass):
+        self.clas = c_lass
+    def __repr__(self):
+        return "ClassImp("+self.selfname+")"
+#class ClassInc:
+#    def __init__(self, c_lass):
+#        self.clas = c_lass
+#    def __repr__(self):
+#        return "ClassInc("+self.clas.selfname+")"
+
 
 class DepGL:
     def __init__(self):
         self.PL = list()
         self.PDG = dict()
         self.DGLMode = "master"
+        self.prefix = ""
+
+    def __repr__(self):
+        return "DepGL of mode "+self.DGLMode+" where DP is: \n " + "\n".join([str(it) for it in self.PL]) + "\n and PDG is \n" + "\n".join([str(pair[0])+"    :    "+str(pair[1]) for pair in self.PDG.items()])
 
     def register_method(self, jm, deps): 
         self.DGLMode = "method"
+        jm.selfname = jm.getMethodName()
         self.PDG[jm] = deps
 
     def register_class(self, jc, deps):
         self.DGLMode = "class"
+        self.prefix = jc.getClassName()
+        jc.selfname = jc.getClassName()
+        for dep in deps:
+            if isinstance(dep, ClassDep):
+                dep.selfname = dep.clas
+            
         self.PDG[jc] = deps
 
     def register_file(self, jf, deps):
         self.DGLMode = "file"
-        self.PDG[pkgName] = deps
+        self.prefix = jf.packageName
+        jf.selfname = jf.packageName
+        self.file = jf
+        for dep in deps:
+            if isinstance(dep, JavaClass):
+                dep.selfname = self.prefix+"."+dep.getClassName()
+            if isinstance(dep, ClassImp):
+                dep.selfname = dep.clas
+        self.PDG[jf] = deps
 
     def addDGL(self, other):
-        pdb.set_trace()
-        pass
+        #pdb.set_trace()
+        
+        # Merge other's PL onto self; for that end, append self name to their starts
+        for el in other.PL:
+            el.selfname = self.prefix+"."+el.selfname if self.prefix!="" else el.selfname
+            self.PL.append(el)
+
+        # Merge other's PDG onto self; do the same for their dpees and deps alike
+        # TODO
+        for dependee, deps in other.PDG.items():
+            dependee.selfname = self.prefix+"."+dependee.selfname if self.prefix!= "" else dependee.selfname
+            new_deps = set()
+            for dep in deps:
+                if isinstance(dep, ClassImp):
+                    dep.selfname = dep.selfname
+                elif isinstance(dep, MethodCall) and "selfname" not in dir(dep):
+                        if dep.methodOf is None or dep.methodOf=="":
+                            dep.selfname = (self.prefix+"."+dep.methodName) if self.prefix != "" else dep.methodName
+                        else:
+                            dep.selfname = dep.methodOf + "." +  dep.methodName
+                elif isinstance(dep, ClassDep) and self.DGLMode=="file" and (dep.selfname in [imp.split(".")[-1] for imp in self.file.imports]):
+                    dep = self.imports[[imp.split(".")[-1] for imp in self.file.imports].index(dep.selfname)]
+                else:
+                    try:
+                        dep.selfname = (self.prefix+"."+dep.selfname) if self.prefix != "" else dep.selfname
+                    except:
+                        pdb.set_trace()
+                new_deps.add(dep)
+            self.PDG[dependee] = new_deps
+
         #TODO, how to merge PLs and PDGs (appending is not enough, prefixes must be altered, see note below)
 
     def attempt_resolve(self):  # TODO this manner of comparison, see note below
+        #pdb.set_trace()
         progress = True
         while progress:
             resolved = set(self.PL)
@@ -146,14 +214,45 @@ class DepGL:
             for tr in torem:
                 del self.PDG[tr]
 
-        pdb.set_trace()
+        #pdb.set_trace()
         pass
 
     def force_resolve(self):  
+
+        # STEP 1 Begin by resolving external dependencies
+        # Go through every single ClassImp, and if not in customPkgs, resolve it by removing the dep, then attempt resolve
+        for dependee, deps in self.PDG.items():
+            newdeps = set()
+            for dep in deps:
+                if isinstance(dep, ClassImp):
+                    sn = dep.selfname
+                    if sn[0] == ".":
+                        sn = sn[1:]
+                    snd = ".".join(sn.split(".")[:-1])
+                    if sn in self.customPkgs or snd in self.customPkgs:
+                        newdeps.add(dep)
+                else:
+                    newdeps.add(dep)
+            self.PDG[dependee] = newdeps
+
+        self.attempt_resolve()
+
+        # STEP 2 Remove all MethodCalls that use ___UNK
+        for dependee, deps in self.PDG.items():
+            newdeps = set()
+            for dep in deps:
+                if isinstance(dep, MethodCall) and ("___UNK" in dep.selfname.split(".")):
+                    pass
+                else:
+                    newdeps.add(dep)
+            self.PDG[dependee] = newdeps
+        self.attempt_resolve()
+
         pdb.set_trace()
+
         #TODO; force empty into PL; figure out a good heuristic for it
         # Cycles should be detected and broken up at "random" point (heuristic for least distruption)
-        return self.PL
+        return (self.PL, self.PDG)
 
     #TODO need a way of learning hierarchy, registering something should give the added ones that prefix
     
@@ -172,9 +271,10 @@ def gatherCalls(line, tree, context, fieldDeclaration=False):
     #parser = javalang.parser.Parser(tokens)
     calls = [(path, node) for path, node in tree.filter(javalang.tree.MethodInvocation)]
     ret = set()
-    for call in calls:
+    
+    for i, call in enumerate(calls):
         #pdb.set_trace()
-        c = MethodCall(call[1].member, call[1].qualifier)
+        c = MethodCall(call[1].member, call[1].qualifier if (i==0 or call[1].qualifier!=None) else "___UNK")
         # seek context
         for contextLevel in [call[0][0]]: # Note how in-order traversal ensures the inner-most and latest context will survive only -> Actually ignore this, [0][0] with in-order traversal should enable the same fxn; the dumb list creation is only for indentation preservation; one small issue if there exists x of type T and the current line declares an x of type P, x will be pulled in type P not X
             # Seek LocalVariableDeclaration at this level
@@ -255,9 +355,16 @@ class JavaMethod:
 
         self.deps = set()
 
+    def __repr__(self):
+        return "JavaMethod ("+self.selfname+")"
+
     def gatherDeps(self):
         if len(self.deps) > 0:
             return self.deps 
+
+
+        #if self.getMethodName()=="dip2px":
+        #    pdb.set_trace()
         
         methodLocalVars = dict()
         for i, bl in enumerate(self.bodyLines):
@@ -375,6 +482,9 @@ class JavaClass:
 
         self.deps = set()
 
+    def __repr__(self):
+        return "JavaClass ("+self.selfname+")"
+
     def stripSelfRefs(self, deps):
         ret = set()
         for dep in deps:
@@ -426,7 +536,28 @@ class JavaClass:
                     dep.contextualize(fields[dep.methodOf.split(".")[0]])
 
 
-        #  predicateless methods are of this class, note it down or bear in mind for graph construction
+        #  predicateless methods are of this class, note it down or bear in mind for graph construction by not propping them further
+        # 1) Do not separately register dependencies to inherited methods as they are implicit; instead, make them a dependency on the inherited, and also make methods note this is applicable (i.e. not a FA)
+        newdeps = set()
+        depsToRemoveFromMethods = set()
+        for dep in self.deps:
+            if isinstance(dep, MethodCall) and (dep.methodOf == None or dep.methodOf == "" or dep.methodOf== "self") and dep.methodName not in [m.getMethodName() for m in self.methods]: # Inherited method call
+                # No need to add extension to deps list, but only to those of the methods that gave it
+                # Add to list to remove from methods' deps
+                depsToRemoveFromMethods.add(dep)
+            else:
+                newdeps.add(dep)
+        self.deps = newdeps
+        # Remove from methods' deps
+        for m in self.methods:
+            prelen = len(m.deps)
+            m.deps = m.deps - depsToRemoveFromMethods
+            if len(m.deps) != prelen:
+                if self.extension =="":
+                    pdb.set_trace()
+                m.deps.add(self.extension)
+
+        # 2) Do not pass to file any internal methods' dependencies
         return self.stripSelfRefs(self.deps)
 
     def getClassName(self):
@@ -438,6 +569,8 @@ class JavaClass:
         deps |= self.faDeps
         if self.extension != "":
             deps.add(self.extension)
+        for m in self.methods:
+            deps.add(m)
         DGL.register_class(self, deps)
         for m in self.methods:
             DGL.addDGL(m.constructDGL())
@@ -557,6 +690,9 @@ class JavaFile:
 
         print("instances created")
 
+    def __repr__(self):
+        return "JavaFile at "+self.filepath + " for package "+self.packageName
+
     def gatherDeps(self):
         print("deps gathering for ", self.filepath)
        
@@ -571,8 +707,14 @@ class JavaFile:
     def constructDGL(self):
         DGL = DepGL()
         deps = set()
-        for c in self.classes:
-            deps.add(ClassDep(c.getClassName()))
+        #for c in self.classes:
+        #    deps.add(ClassInc(c))
+        deps |= set(self.classes)
+        DGL.imports = list()
+        for imp in self.imports:
+            ci = ClassImp(imp)
+            deps.add(ci)
+            DGL.imports.append(ci)
         DGL.register_file(self, deps)
         for c in self.classes:
             DGL.addDGL(c.constructDGL())
@@ -585,10 +727,16 @@ def constructDep(files):
     # We will process at each level all orderable deps at that level, yielding up only what we cannot resolve
     # At top level, we will try to resolve what we can, but will go the heuristic route if we cannot
 
+    pdb.set_trace()
     DGL = DepGL()
     for file in files:
         DGL.addDGL(file.constructDGL())
+    print("All files constructed DGL")
     DGL.attempt_resolve()
+    print("Soft attempt done")
+    DGL.customPkgs = list()
+    for file in files:
+        DGL.customPkgs.append(file.packageName)
     return DGL.force_resolve()
 
 def parseDependencies():
