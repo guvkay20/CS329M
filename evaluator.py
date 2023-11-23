@@ -179,7 +179,7 @@ def generateJCPrompt(items):
     Class Signature:
     """ + items[0].signature + """
     Field Assignments:
-    """ + "\n".join(items[0].fieldAssigns) + """
+    """ + "\n".join([fa[0].strip() for fa in items[0].fieldAssigns]) + """
     Method Signatures:
     """ + "\n".join([m.signature for m in items[0].methods]) + """
     Comment:
