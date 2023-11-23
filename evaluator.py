@@ -171,7 +171,7 @@ def generateJCPrompt(items):
      */
     Feedback:
     * Naturalness: The language of the comment is needlessly technical, although it is otherwise accessible. 3/5
-    * Thoroughness: The comment fails to discuss the non-block interfaces provided by the method. 3/5
+    * Thoroughness: The comment fails to discuss the non-block interfaces provided by the class. 3/5
     * Non-Repetitiveness: The comment needlessly notes how the class provides an interface in two different ways. 2/5
     * Brevity: The comment remains sufficiently high-level for a reader to quickly understand the purpose of. 5/5
     * Accuracy: The comment does not notice how abstract methods are not implemented in Java; meaning that it is not possible for it to implement retrieving these block aspects. The general purpose of the class is still correct. 2/5
@@ -189,8 +189,48 @@ def generateJCPrompt(items):
     return prompt
     
 def generateJFPrompt(items):
-    return ""
+    prompt = """
+    Given a Java file's class signatures, provide feedback on the following header comment generated to summarize the file's purpose, based on the following criteria:
+    * Naturalness: The generated comment is accessible to human readers and is fluent in its language.
+    * Thoroughness: The generated comment does not omit any important aspect of the fuke.
+    * Non-Repetitiveness: The generated comment does not repeat information.
+    * Brevity: The generated comment remains brief and does not delve into unnecessary detail.
+    * Accuracy: The generated comment does not contain inaccurate information about the file.
 
+    Class Signatures:
+
+    Comment:
+    /**
+     * 
+     */
+    Feedback:
+    * Naturalness: 
+    * Thoroughness: 
+    * Non-Repetitiveness: 
+    * Brevity: 
+    * Accuracy: 
+
+    Class Signatures:
+    
+    Comment:
+    /**
+     * 
+     */
+    Feedback:
+    * Naturalness: 
+    * Thoroughness: 
+    * Non-Repetitiveness: 
+    * Brevity: 
+    * Accuracy: 
+    
+    Class Signatures:
+    """ + "\n".join([c.signature for c in items[0].classes]) + """
+    Comment:
+    """ + items[1] + """
+    Feedback:
+    """
+    return prompt
+    
 if __name__ == "__main__":
     inp = pickle.load(open("docs.pkl","rb"))
     toRate = list(inp.items())
