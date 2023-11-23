@@ -198,30 +198,31 @@ def generateJFPrompt(items):
     * Accuracy: The generated comment does not contain inaccurate information about the file.
 
     Class Signatures:
-
+    public class MainActivity extends Activity
     Comment:
     /**
-     * 
+     * This file contains a file that works to track user clicks in order to generate videos from GIFs upon demand. This class will generate the video corresponding to a GIF upon being clicked on.
      */
     Feedback:
-    * Naturalness: 
-    * Thoroughness: 
-    * Non-Repetitiveness: 
-    * Brevity: 
-    * Accuracy: 
+    * Naturalness: The comment is very legible and natural in its language. 5/5
+    * Thoroughness: The comment describes the purpose of the only single class present in the file quite well. 5/5
+    * Non-Repetitiveness: The comment is rather repetitive, describing the same function twice. 2/5
+    * Brevity: The comment is reasonably brief and remains high-level, although it suffers from some repetition. 4/5
+    * Accuracy: The comment mistakenly calls the class in the file a file. It is otherwise accurate, to our best ability to provide feedback. 3/5
 
     Class Signatures:
-    
+    public class Parser
+    public class Lexer
     Comment:
     /**
-     * 
+     * This file has two classes. Parser: Parses a lexed file in language. Lexer: Lexes a code file in language.
      */
     Feedback:
-    * Naturalness: 
-    * Thoroughness: 
-    * Non-Repetitiveness: 
-    * Brevity: 
-    * Accuracy: 
+    * Naturalness: The comment is not very natural in its language and structure, choosing to interrupt the flow of language to subdivide the discussion of the file by classes. It fails to provide any higher-level overview. 2/5
+    * Thoroughness: While the file header mentions both classes and their functions in very basic terms, a lot of important details, such as the choice of language and the purpose of these tools are omitted. There is a lack of high-level details. 2/5
+    * Non-Repetitiveness: The comment is not repetitive. 5/5
+    * Brevity: The comment is very brief. 5/5
+    * Accuracy: The comment does not contain any inaccurate information, to our best ability to tell. 5/5
     
     Class Signatures:
     """ + "\n".join([c.signature for c in items[0].classes]) + """
