@@ -116,6 +116,7 @@ def generateJMPrompt(items):
     * Non-Repetitiveness: The comment is not repetitive in any manner. 5/5
     * Brevity: The comment discusses the method in unnecessary amounts of detail, going almost token-by-token. 1/5
     * Accuracy: We can only assume that the references to the parent function are accurately presented. The other information presented in the comment is entirely accurate. 5/5
+    
     Method:
     """ + items[0].cleaned_ms + """
     Comment:
@@ -125,8 +126,68 @@ def generateJMPrompt(items):
     return prompt
 
 def generateJCPrompt(items):
-    return ""
+    prompt = """
+    Given the signature of a Java class, its field assignments, and its methods' signatures, provide feedback on the following header comment generated to summarize its function, based on the following criteria:
+    * Naturalness: The generated comment is accessible to human readers and is fluent in its language.
+    * Thoroughness: The generated comment does not omit any important aspect of the class.
+    * Non-Repetitiveness: The generated comment does not repeat information.
+    * Brevity: The generated comment remains brief and does not delve into unnecessary detail.
+    * Accuracy: The generated comment does not contain inaccurate information about the class.
 
+    Class Signature:
+    public class IntMap<V> extends TreeMap<Integer,V> 
+    Field Assignments:
+    private static final long serialVersionUID = 1L;
+    Method Signatures:
+    public int newInt()
+    Comment:
+    /**
+     * This method implements an integer-keyed tree map structure, extending the Java base class of the same name. 
+     * It provides a utility to generate new keys.
+     */
+    Feedback:
+    * Naturalness: The language used in the comment is rather fluent and is mostly accessible. The discussion of the extension is not necessary. 4/5
+    * Thoroughness: The comment is quite thorough. 5/5
+    * Non-Repetitiveness: There is not much repetition in the comment. 5/5
+    * Brevity: The discussion of the tree map extension could have been much briefer with more high-level detail. 3/5
+    * Accuracy: The comment is accurate to our best ability to tell. 5/5
+
+    Class Signature:
+    public abstract class CaptchaStrategy
+    Field Assignments:
+    protected Context mContext;
+    Method Signatures:
+    public CaptchaStrategy(Context ctx)
+    protected Context getContext()
+    public abstract Path getBlockShape(int blockSize)
+    public abstract PositionInfo getBlockPostionInfo(int width, int height, int blockSize)
+    public PositionInfo getPositionInfoForSwipeBlock(int width, int height, int blockSize)
+    public abstract Paint getBlockShadowPaint()
+    public abstract Paint getBlockBitmapPaint()
+    public void decoreateSwipeBlockBitmap(Canvas canvas, Path shape) 
+    Comment:
+    /**
+     * Creates an interface for captcha implementations. This is done by creating the CaptchaStrategy abstract class. Implements how to get various aspects of a captcha block.
+     */
+    Feedback:
+    * Naturalness: The language of the comment is needlessly technical, although it is otherwise accessible. 3/5
+    * Thoroughness: The comment fails to discuss the non-block interfaces provided by the method. 3/5
+    * Non-Repetitiveness: The comment needlessly notes how the class provides an interface in two different ways. 2/5
+    * Brevity: The comment remains sufficiently high-level for a reader to quickly understand the purpose of. 5/5
+    * Accuracy: The comment does not notice how abstract methods are not implemented in Java; meaning that it is not possible for it to implement retrieving these block aspects. The general purpose of the class is still correct. 2/5
+    
+    Class Signature:
+    """ + items[0].signature + """
+    Field Assignments:
+    """ + "\n".join(items[0].fieldAssigns) + """
+    Method Signatures:
+    """ + "\n".join([m.signature for m in items[0].methods]) + """
+    Comment:
+    """ + items[1] + """
+    Feedback:
+    """
+    return prompt
+    
 def generateJFPrompt(items):
     return ""
 
