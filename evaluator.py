@@ -1,7 +1,7 @@
 import torch
 import transformers
 
-modelname = 'tiiuae/falcon-rw-1b'
+modelname = 'princeton-nlp/Sheared-LLaMa-1.3B'#'tiiuae/falcon-rw-1b'
 
 tokenizer = transformers.AutoTokenizer.from_pretrained(modelname)
 pipeline = transformers.pipeline(
@@ -14,7 +14,7 @@ pipeline = transformers.pipeline(
 input = "Rate the following comment numerically, between 1 and 5, where higher means more natural, for its naturalness:\n /*\n * This function contorts the input array into its reverse, which it in turn outputs. \n */ \n I rate it as:"
 guesses = pipeline(
     input,
-    max_length=1,
+    max_length=100,
     do_sample=True,
     top_k=5,
     num_return_sequences=1,
