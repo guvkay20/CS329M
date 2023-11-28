@@ -111,17 +111,27 @@ def interpretResults(generation):
         return -1 # Failed
     return ratings
 
-def generatePrompt(items):
+def generatePromptSPSD(items):
     if isinstance (items[0], JavaMethod):
-        return generateJMPrompt(items)
+        return generateJMPromptSPSD(items)
     elif isinstance (items[0], JavaClass):
-        return generateJCPrompt(items)
+        return generateJCPromptSPSD(items)
     elif isinstance (items[0], JavaFile):
-        return generateJFPrompt(items)
+        return generateJFPromptSPSD(items)
     else:
         raise Exception("Unknown item type")
 
-def generateJMPrompt(items):
+def generatePromptSPDD(items):
+    if isinstance (items[0], JavaMethod):
+        return generateJMPromptSPSD(items)
+    elif isinstance (items[0], JavaClass):
+        return generateJCPromptSPDD(items)
+    elif isinstance (items[0], JavaFile):
+        return generateJFPromptSPDD(items)
+    else:
+        raise Exception("Unknown item type")
+
+def generateJMPromptSPSD(items):
     messages = [
             {"role":"system", "content": """Given a Java method, provide feedback on the following header comment generated to summarize its function and interface, based on the following criteria:
     * Naturalness: The generated comment is accessible to human readers and is fluent in its language.
@@ -177,7 +187,7 @@ def generateJMPrompt(items):
     ]
     return messages
 
-def generateJCPrompt(items):
+def generateJCPromptSPSD(items):
     prompt = [{"role":"system","content":"""
     Given the signature of a Java class, its field assignments, and its methods' signatures, provide feedback on the following header comment generated to summarize its function, based on the following criteria:
     * Naturalness: The generated comment is accessible to human readers and is fluent in its language.
@@ -235,8 +245,84 @@ def generateJCPrompt(items):
     Comment:
     """ + items[1]}]
     return prompt
+
+def generateJCPromptSPDD(items):
+    prompt = [{"role":"system","content":"""
+    Given a Java class, including its field assignments and its methods, provide feedback on the following header comment generated to summarize its function, based on the following criteria:
+    * Naturalness: The generated comment is accessible to human readers and is fluent in its language.
+    * Thoroughness: The generated comment does not omit any important aspect of the class.
+    * Non-Repetitiveness: The generated comment does not repeat information.
+    * Brevity: The generated comment remains brief and does not delve into unnecessary detail.
+    * Accuracy: The generated comment does not contain inaccurate information about the class.
+    Make sure to follow the format in the examples and provide your ratings out of 5."""},
+        {"role":"user","content":"""Class:
+public class IntMap<V> extends TreeMap<Integer,V> {
+    private static final long serialVersionUID = 1L;
+
+    public int newInt() {
+        int k = size();
+        while (containsKey(k)) k++;
+        return k;
+    }
     
-def generateJFPrompt(items):
+}
+    Comment:
+    /**
+     * This method implements an integer-keyed tree map structure, extending the Java base class of the same name. 
+     * It provides a utility to generate new keys.
+     */"""},
+        {"role":"assistant","content":"""Feedback:
+    * Naturalness: The language used in the comment is rather fluent and is mostly accessible. The discussion of the extension is not necessary. 4/5
+    * Thoroughness: The comment is quite thorough. 5/5
+    * Non-Repetitiveness: There is not much repetition in the comment. 5/5
+    * Brevity: The discussion of the tree map extension could have been much briefer with more high-level detail. 3/5
+    * Accuracy: The comment is accurate to our best ability to tell. 5/5"""},
+        {"role":"user","content":"""Class:
+public abstract class CaptchaStrategy {
+
+    protected Context mContext;
+
+    public CaptchaStrategy(Context ctx) {
+        this.mContext = ctx;
+    }
+
+    protected Context getContext() {
+        return mContext;
+    }
+
+    public abstract Path getBlockShape(int blockSize);
+
+    public abstract PositionInfo getBlockPostionInfo(int width, int height, int blockSize);
+
+    public PositionInfo getPositionInfoForSwipeBlock(int width, int height, int blockSize){
+        return getBlockPostionInfo(width,height,blockSize);
+    }
+
+    public abstract Paint getBlockShadowPaint();
+
+    public abstract Paint getBlockBitmapPaint();
+
+    public void decoreateSwipeBlockBitmap(Canvas canvas, Path shape) {
+
+    }
+}
+    Comment:
+    /**
+     * Creates an interface for captcha implementations. This is done by creating the CaptchaStrategy abstract class. Implements how to get various aspects of a captcha block.
+     */"""},
+        {"role":"assistant","content":"""Feedback:
+    * Naturalness: The language of the comment is needlessly technical, although it is otherwise accessible. 3/5
+    * Thoroughness: The comment fails to discuss the non-block interfaces provided by the class. 3/5
+    * Non-Repetitiveness: The comment needlessly notes how the class provides an interface in two different ways. 2/5
+    * Brevity: The comment remains sufficiently high-level for a reader to quickly understand the purpose of. 5/5
+    * Accuracy: The comment does not notice how abstract methods are not implemented in Java; meaning that it is not possible for it to implement retrieving these block aspects. The general purpose of the class is still correct. 2/5"""},
+        {"role":"user","content":"""Class:
+    """ + items[0].cleaned_cs + """
+    Comment:
+    """ + items[1]}]
+    return prompt
+    
+def generateJFPromptSPSD(items):
     prompt = [{"role":"system","content":"""Given a Java file's class signatures, provide feedback on the following header comment generated to summarize the file's purpose, based on the following criteria:
     * Naturalness: The generated comment is accessible to human readers and is fluent in its language.
     * Thoroughness: The generated comment does not omit any important aspect of the fuke.
@@ -276,25 +362,117 @@ def generateJFPrompt(items):
     Feedback:
     """}]
     return prompt
-    
-if __name__ == "__main__":
-    #pdb.set_trace()
-    inp = pickle.load(open("docs_basic.pkl","rb"))
+
+def generateJFPromptSPDD(items):
+    prompt = [{"role":"system","content":"""Given a Java file's class signatures, and their respective method signatures, provide feedback on the following header comment generated to summarize the file's purpose, based on the following criteria:
+    * Naturalness: The generated comment is accessible to human readers and is fluent in its language.
+    * Thoroughness: The generated comment does not omit any important aspect of the fuke.
+    * Non-Repetitiveness: The generated comment does not repeat information.
+    * Brevity: The generated comment remains brief and does not delve into unnecessary detail.
+    * Accuracy: The generated comment does not contain inaccurate information about the file.
+    Make sure to follow the format in the examples and provide your ratings out of 5."""},
+        {"role":"user","content":"""Class Signatures:
+    public class MainActivity extends Activity {
+        Method Signatures:
+	    @Override protected void onCreate(Bundle savedInstanceState)         
+	    @Override public boolean onCreateOptionsMenu(Menu menu)         
+	    public void onGifClick(View v)         
+    }
+    Comment:
+    /**
+     * This file contains a file that works to track user clicks in order to generate videos from GIFs upon demand. This class will generate the video corresponding to a GIF upon being clicked on.
+     */"""},
+        {"role":"assistant","content":"""Feedback:
+    * Naturalness: The comment is very legible and natural in its language. 5/5
+    * Thoroughness: The comment describes the purpose of the only single class present in the file quite well. 5/5
+    * Non-Repetitiveness: The comment is rather repetitive, describing the same function twice. 2/5
+    * Brevity: The comment is reasonably brief and remains high-level, although it suffers from some repetition. 4/5
+    * Accuracy: The comment mistakenly calls the class in the file a file. It is otherwise accurate, to our best ability to provide feedback. 3/5"""},
+        {"role":"user","content":"""Class Signatures:
+    public class Parser {
+        Method Signatures:
+        public Parser()
+        public boolean parseFilesinHierarchy (UnparsedHierarchy hier)
+        public boolean parseFile (UnparsedFile file)
+        private boolean parseClass (UnparsedChunk class)
+        private boolean parseMethod (UnparsedChunk method)
+        private boolean parseStatement (UnparsedChunk statement)
+    }
+    public class Lexer {
+        Method Signatures:         
+        public Lexer()
+        public boolean lexHierarchy(String rootpath)
+        private boolean lexFile(String filepath)
+    }
+    Comment:
+    /**
+     * This file has two classes. Parser: Parses a lexed hierarchy in language. Lexer: Lexes a code hierarchy in language.
+     */"""},
+        {"role":"assistant","content":"""Feedback:
+    * Naturalness: The comment is not very natural in its language and structure, choosing to interrupt the flow of language to subdivide the discussion of the file by classes. It keeps the term 'hierarchy' from the code verbatim, without explaining its purpose. It fails to provide any higher-level overview. 2/5
+    * Thoroughness: While the file header mentions both classes and their functions in very basic terms, a lot of important details, such as the choice of language and the purpose of these tools are omitted. There is a lack of high-level details. 2/5
+    * Non-Repetitiveness: The comment is not repetitive. 5/5
+    * Brevity: The comment is very brief. 5/5
+    * Accuracy: The comment does not contain any inaccurate information, to our best ability to tell. 5/5"""},
+        {"role":"user","content":"""Class Signatures:
+    """ + "\n".join(["\n".join([c.signature + " {", "      Method Signatures:"] + [m.signature for m in c.methods] + ["}"]) for c in items[0].classes]) + """
+    Comment:
+    """ + items[1] + """
+    Feedback:
+    """}]
+    return prompt
+
+def singularPromptSingleDepth(inp):
     toRate = list(inp.items())
     prompts = list()
     for tr in toRate:
-        prompts.append(generatePrompt(tr))
+        prompts.append(generatePromptSPSD(tr))
+    #prompts = [generatePrompt(tr) for tr in toRate] # did not work for some reason
+    #generations = modelcalls(prompts)
+    generations = gptcalls(prompts)
+    metricRatings = [interpretResults(gen) for gen in generations]
+    #for i in range(len(generations)):
+    #    if metricRatings[i]=={}:
+    #        print(generations[i])
+    return metricRatings
+ 
+def singularPromptDoubleDepth(inp):
+    toRate = list(inp.items())
+    prompts = list()
+    for tr in toRate:
+        prompts.append(generatePromptSPDD(tr))
     #pdb.set_trace()
     #prompts = [generatePrompt(tr) for tr in toRate] # did not work for some reason
     #generations = modelcalls(prompts)
     generations = gptcalls(prompts)
-    #pdb.set_trace()
     metricRatings = [interpretResults(gen) for gen in generations]
-    #ret = gptcalls([1])
-    #import pdb
-    for i in range(len(generations)):
-        if metricRatings[i]=={}:
-            print(generations[i])
-    pdb.set_trace()
+    #for i in range(len(generations)):
+    #    if metricRatings[i]=={}:
+    #        print(generations[i])
+    #pdb.set_trace()
+    return metricRatings
+
+def aggregateSingularRatings(sr):
+    agg = dict()
+    for r in sr:
+        for r_name, r_val in r.items():
+            if r_name not in agg:
+                agg[r_name] = [0,0]
+            agg[r_name][0] += r_val
+            agg[r_name][1] += 5
+    for r_name in agg:
+        agg[r_name].append(agg[r_name][0]/agg[r_name][1])
+    return agg
+
+
+if __name__ == "__main__":
+   inp = pickle.load(open("docs_basic.pkl","rb"))
+   res = singularPromptDoubleDepth(inp)
+   ares = aggregateSingularRatings(res)
+   inp2 = pickle.load(open("docs.pkl","rb"))
+   res2 = singularPromptDoubleDepth(inp2)   
+   ares2 = aggregateSingularRatings(res2)
+   aggregateSingularRatings
+   pdb.set_trace()
 
         
