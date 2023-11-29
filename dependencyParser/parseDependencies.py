@@ -350,6 +350,9 @@ class JavaMethod:
 
         # get signature
         self.signature = ms[:ms.find("{")]
+        #if self.signature.split()[-2]=="@interface": # Is an interface, not a method - no support for this in our system
+        if "@interface" in self.cleaned_ms.split():
+            raise Exception("isinterface")
         self.fxnbody = ms[ms.find("{")+1:-1]
 
         self.bodyLines = []
@@ -375,8 +378,11 @@ class JavaMethod:
                 if m==-1:
                         assert(remainder.strip()=="")
                         break
-            
-            buff = buff + remainder[:m+1]
+           
+            try:
+                buff = buff + remainder[:m+1]
+            except:
+                pdb.set_trace()
             remainder = remainder[m+1:]
             
             if m == R:
@@ -406,6 +412,8 @@ class JavaMethod:
                     self.bodyLines[-1] = self.bodyLines[-1] + buff
                 elif len(self.bodyLines)>0 and self.bodyLines[-1].strip().split()[0]=="try" and buff.strip().split()[0]=="catch": #Append up (try-)catch
                     self.bodyLines[-1] = self.bodyLines[-1] + buff
+                elif len(self.bodyLines)>0 and self.bodyLines[-1].strip().split()[0]=="try" and buff.strip().split()[0]=="finally": #Append up (try-[catch]+-)finally
+                    self.bodyLines[-1] = self.bodyLines[-1] + buff
                 else:
                     self.bodyLines.append(buff)
                 buff = ""
@@ -430,10 +438,10 @@ class JavaMethod:
                 methodLocalVars[formalParameter.name] = formalParameter.type
 
         for i, bl in enumerate(self.bodyLines):
-            try:
-                lineDeps = gatherCalls(bl, self.AST.body[i], self.cleaned_ms)
-            except:
-                pdb.set_trace()
+            #try:
+            lineDeps = gatherCalls(bl, self.AST.body[i], self.cleaned_ms)
+            #except:
+            #    pdb.set_trace()
 
             """ THAT IS NO EXCUSE, THEY ARE STILL DEPENDENT
             # If methods are not of something, they must be of self. If so, remove them from deps
@@ -534,13 +542,24 @@ class JavaClass:
                 buff = ""
                 i += 1
             if m == S and len(seekstack)==0:
-                self.fieldAssigns.append((buff,self.AST.body[i]))
+                if isinstance(self.AST.body[i],javalang.tree.MethodDeclaration):
+                    methodStrs.append((buff,self.AST.body[i]))
+                else:
+                    self.fieldAssigns.append((buff,self.AST.body[i]))
                 buff = ""
                 i += 1
 
         self.methods = []
         for i, ms in enumerate(methodStrs):
-            self.methods.append(JavaMethod(lbf, cbf, ms[0], ms[1]))#, dirtyCSs[i])
+            try:
+                self.methods.append(JavaMethod(lbf, cbf, ms[0], ms[1]))#, dirtyCSs[i])
+            except Exception as e:
+                if str(e) == "isinterface":
+                    continue
+                else:
+                    raise
+
+
 
         self.deps = set()
 
@@ -589,8 +608,11 @@ class JavaClass:
         # First Gather Field Assigns' Types
         fields = dict()
         for fa in self.fieldAssigns:
-            for vd in fa[1].declarators:
-                fields[vd.name] = fa[1].type
+            try:
+                for vd in fa[1].declarators:
+                    fields[vd.name] = fa[1].type
+            except:
+                pdb.set_trace()
         # Then look thru them
         for dep in self.deps:
             if isinstance(dep, MethodCall) and not dep.hasContext:
