@@ -59,18 +59,18 @@ def javaClean(f):
             endOfLastMLC = 0
             SLCTrigger = False
             while i < len(beginMLCs) or j < len(endMLCs) or k < len(beginSLCs):
-                m = min(beginMLCs[i] if i < len(beginMLCs) else 1e10, endMLCs[j] if i < len(endMLCs) else 1e10, beginSLCs[k] if i < len(beginSLCs) else 1e10)
-                if m == (endMLCs[j] if i < len(endMLCs) else 1e10):
+                m = min(beginMLCs[i] if i < len(beginMLCs) else 1e10, endMLCs[j] if j < len(endMLCs) else 1e10, beginSLCs[k] if k < len(beginSLCs) else 1e10)
+                if m == (endMLCs[j] if j < len(endMLCs) else 1e10):
                     assert(inMLComment)
                     inMLComment = False
                     endOfLastMLC = 2 + m
                     j += 1
-                if m == (beginSLCs[k]  if i < len(beginSLCs) else 1e10) and not inMLComment:
+                if m == (beginSLCs[k]  if k < len(beginSLCs) else 1e10) and not inMLComment:
                     commentlessLine = commentlessLine + line[endOfLastMLC:m]
                     k += 1
                     SLCTrigger = True
                     break
-                if m == (beginSLCs[k] if i < len(beginSLCs) else 1e10) and inMLComment:
+                if m == (beginSLCs[k] if k < len(beginSLCs) else 1e10) and inMLComment:
                     k += 1
                 if m == (beginMLCs[i] if i < len(beginMLCs) else 1e10):
                     if not inMLComment:
@@ -358,6 +358,9 @@ class JavaMethod:
         remainder = self.fxnbody
         seekstack = [] # Keep track of []{}()''""
         while remainder != "":
+            #if self.signature == "public static void main(String[] args) " and len(self.bodyLines)==4:
+            #    pdb.set_trace()
+
             S = remainder.find(";")
             if len(seekstack) != 0:
                 S = 1e10
@@ -401,6 +404,8 @@ class JavaMethod:
                     self.bodyLines[-1] = self.bodyLines[-1] + buff
                 elif len(self.bodyLines)>0 and self.bodyLines[-1].strip().split()[0]=="if" and buff.strip().split()[0]=="else": #Append up (if-)else[if-else...]
                     self.bodyLines[-1] = self.bodyLines[-1] + buff
+                elif len(self.bodyLines)>0 and self.bodyLines[-1].strip().split()[0]=="try" and buff.strip().split()[0]=="catch": #Append up (try-)catch
+                    self.bodyLines[-1] = self.bodyLines[-1] + buff
                 else:
                     self.bodyLines.append(buff)
                 buff = ""
@@ -425,10 +430,10 @@ class JavaMethod:
                 methodLocalVars[formalParameter.name] = formalParameter.type
 
         for i, bl in enumerate(self.bodyLines):
-            #try:
-            lineDeps = gatherCalls(bl, self.AST.body[i], self.cleaned_ms)
-            #except:
-            #pdb.set_trace()
+            try:
+                lineDeps = gatherCalls(bl, self.AST.body[i], self.cleaned_ms)
+            except:
+                pdb.set_trace()
 
             """ THAT IS NO EXCUSE, THEY ARE STILL DEPENDENT
             # If methods are not of something, they must be of self. If so, remove them from deps
@@ -679,9 +684,11 @@ class JavaFile:
                 remainder = remainder[1+statementBreak:]
         
         pkgline = headerLines[0].split()
-        assert(pkgline[0] == "package")
-        self.packageName = pkgline[1].split(";")[0]
-        assert(len(pkgline)==2 or (len(pkgline)==3 and pkgline[2] ==";"));
+        if (pkgline[0] == "package"):
+            self.packageName = pkgline[1].split(";")[0]
+            assert(len(pkgline)==2 or (len(pkgline)==3 and pkgline[2] ==";"));
+        else:
+            self.packageName = "not_in_package"
        
         i = 1
         while True:
@@ -703,9 +710,10 @@ class JavaFile:
         classStrs = []
         while remainder != "":
             rgx = re.search("[\[\]\{\}\(\)'\"\\\\]", remainder)
-            m = rgx.start()
             if rgx is None:
                 m = -1
+            else:
+                m = rgx.start()
             if m == -1:
                         assert(remainder.strip()=="")
                         break
@@ -793,7 +801,8 @@ def constructDep(files):
     print("Soft attempt done")
     DGL.customPkgs = list()
     for file in files:
-        DGL.customPkgs.append(file.packageName)
+        if file.packageName != "not_in_package":
+            DGL.customPkgs.append(file.packageName)
     return DGL.force_resolve()
 
 def parseDependencies():
