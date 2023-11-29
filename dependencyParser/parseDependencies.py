@@ -138,9 +138,14 @@ class DepGL:
         if "updateLevel" not in dir(jm) or jm.updateLevel == "method":
             jm.selfname = jm.getMethodName()
         for dep in deps:
+            if dep=='':
+                continue
             if "updateLevel" not in dir(dep):
-                dep.updateLevel = "method"
-
+                try:
+                    dep.updateLevel = "method"
+                except:
+                    pdb.set_trace()
+        deps = [dep for dep in deps if dep!='']
         self.PDG[jm] = deps
 
     def register_class(self, jc, deps):
@@ -402,7 +407,10 @@ class JavaMethod:
                    seekstack.append(c)               
 
             if m == S and len(seekstack)==0:
-                self.bodyLines.append(buff)
+                if len(self.bodyLines)>0 and self.bodyLines[-1].strip().split()[0]=="if" and buff.strip().split()[0]=="else": #Append up (if-)else[if-else...]
+                    self.bodyLines[-1] = self.bodyLines[-1] + buff
+                else:
+                    self.bodyLines.append(buff)
                 buff = ""
             if m == R and buff[-1]=="}" and len(seekstack)==0:
 
@@ -428,6 +436,8 @@ class JavaMethod:
         if len(self.deps) > 0:
             return self.deps 
 
+        #if self.AST.name=="KeyLevelRoomMapping":
+        #    pdb.set_trace()
 
         #if self.getMethodName()=="dip2px":
         #    pdb.set_trace()
@@ -438,10 +448,10 @@ class JavaMethod:
                 methodLocalVars[formalParameter.name] = formalParameter.type
 
         for i, bl in enumerate(self.bodyLines):
-            #try:
-            lineDeps = gatherCalls(bl, self.AST.body[i], self.cleaned_ms)
-            #except:
-            #    pdb.set_trace()
+            try:
+                lineDeps = gatherCalls(bl, self.AST.body[i], self.cleaned_ms)
+            except:
+                pdb.set_trace()
 
             """ THAT IS NO EXCUSE, THEY ARE STILL DEPENDENT
             # If methods are not of something, they must be of self. If so, remove them from deps
@@ -537,17 +547,25 @@ class JavaClass:
                 else:
                     seekstack.append(c)
 
-            if m == R and buff[-1]=="}" and len(seekstack)==0:
-                methodStrs.append((buff,self.AST.body[i]))
+            if m == R and buff[-1]=="}" and len(seekstack)==0 and (isinstance(self.AST.body[i],javalang.tree.MethodDeclaration) or isinstance(self.AST.body[i],javalang.tree.ClassDeclaration) or isinstance(self.AST.body[i],javalang.tree.ConstructorDeclaration) or isinstance(self.AST.body[i],javalang.tree.InterfaceDeclaration)):
+                try:
+                    methodStrs.append((buff,self.AST.body[i]))
+                except:
+                    pdb.set_trace()
                 buff = ""
                 i += 1
-            if m == S and len(seekstack)==0:
+            elif m==S and len(seekstack)==0 and buff==";": # Happens after enum declarations, which we treat as methods
+                buff = ""
+            elif m == S and len(seekstack)==0:
                 if isinstance(self.AST.body[i],javalang.tree.MethodDeclaration):
                     methodStrs.append((buff,self.AST.body[i]))
                 else:
                     self.fieldAssigns.append((buff,self.AST.body[i]))
                 buff = ""
                 i += 1
+
+        #if self.AST.name=="DungeonGenerator":
+        #    pdb.set_trace()
 
         self.methods = []
         for i, ms in enumerate(methodStrs):
@@ -612,7 +630,10 @@ class JavaClass:
                 for vd in fa[1].declarators:
                     fields[vd.name] = fa[1].type
             except:
-                pdb.set_trace()
+                if isinstance(fa[1], javalang.tree.EnumDeclaration):
+                    fields[fa[1].name] = "enum"
+                else:
+                    raise
         # Then look thru them
         for dep in self.deps:
             if isinstance(dep, MethodCall) and not dep.hasContext:
