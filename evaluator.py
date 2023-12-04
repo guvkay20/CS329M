@@ -8,6 +8,7 @@ import pickle
 from openai import OpenAI
 import json
 from tqdm import tqdm
+import sys
 #import jinja2
 #notebook_login()
 #modelname="meta-llama/Llama-2-7b-chat-hf"
@@ -29,13 +30,13 @@ def modelcalls(inputs):
     #input = "Rate the following comment numerically, between 1 and 5, where higher means more natural, for its naturalness:\n /*\n * This function contorts the input array into its reverse, which it in turn outputs. \n */ \n I rate it as: "
     
     outputs = list()
-    import pdb
-    pdb.set_trace()
+    #import pdb
+    #pdb.set_trace()
     for input in inputs:
         generation =  pipeline(
             input,
             #max_length=100,
-            max_new_tokens=500,
+            max_new_tokens=max_new_toks,
             do_sample=True,
             top_k=5,
             num_return_sequences=1,
@@ -47,7 +48,7 @@ def modelcalls(inputs):
     #    print(guess)
     return outputs
     
-def gptcalls(inputs):
+def gptcalls(inputs, max_new_toks=500):
     #pdb.set_trace()
     client = OpenAI()
     outputs = list()
@@ -159,6 +160,16 @@ def generatePromptDPSD(items):
         return generateJFPromptDPSD(items)
     else:
         raise Exception("Unknown item type")
+    
+def generatePromptDPDD(items):
+    if isinstance (items[0][0], JavaMethod):
+        return generateJMPromptDPSD(items)
+    elif isinstance (items[0][0], JavaClass):
+        return generateJCPromptDPDD(items)
+    elif isinstance (items[0][0], JavaFile):
+        return generateJFPromptDPDD(items)
+    else:
+        raise Exception("Unknown item type")    
 
 def generatePromptSPDD(items):
     if isinstance (items[0], JavaMethod):
@@ -292,7 +303,6 @@ def generateJMPromptDPSD(items):
     ]
     return messages
 
-
 def generateJCPromptSPSD(items):
     prompt = [{"role":"system","content":"""
     Given the signature of a Java class, its field assignments, and its methods' signatures, provide feedback on the following header comment generated to summarize its function, based on the following criteria:
@@ -422,6 +432,92 @@ def generateJCPromptDPSD(items):
     """ + items[1][1]}]
     return prompt
 
+def generateJCPromptDPDD(items):
+    prompt = [{"role":"system","content":"""
+    Given the signature of a Java class, its field assignments and its methods, provide comparative feedback on the following header comments generated to summarize its function, based on the following criteria:
+    * Naturalness: The generated comment is accessible to human readers and is fluent in its language.
+    * Thoroughness: The generated comment does not omit any important aspect of the class.
+    * Non-Repetitiveness: The generated comment does not repeat information.
+    * Brevity: The generated comment remains brief and does not delve into unnecessary detail.
+    * Accuracy: The generated comment does not contain inaccurate information about the class.
+    Provide your ratings as preferences: On each metric, numerically report either 1 or 2 at the end of your feedback, indicating if you prefer the first or the second comment, respectively. Follow the format from the examples."""},
+        {"role":"user","content":"""Class:
+public class IntMap<V> extends TreeMap<Integer,V> {
+    private static final long serialVersionUID = 1L;
+
+    public int newInt() {
+        int k = size();
+        while (containsKey(k)) k++;
+        return k;
+    }
+    
+}
+    Comment 1:
+    /**
+     * This method implements an integer-keyed tree map structure, extending the Java base class of the same name. 
+     * It provides a utility to generate new keys for the integer-keyed tree map structure.
+     */
+    Comment 2:
+    /**
+      * This method creates an IntMap, extending TreeMap.
+      */"""},
+        {"role":"assistant","content":"""Feedback:
+    * Naturalness: The language used in the first comment is rather fluent and is mostly accessible but its discussion of the extension is not necessary. The second comment also suffers from the extension issue, but by failing to explain the mentioned terminology at all, it fails completely at naturalness: 1
+    * Thoroughness: The first comment is quite thorough, whereas the second is quite cursory: 1
+    * Non-Repetitiveness: The first comment mentions the keying basis of the structure twice but there is no repetition is the second comment: 2
+    * Brevity: The discussion of the tree map extension could have been much briefer with more high-level detail, whereas that of the second method is brief: 2
+    * Accuracy: Both comments are accurate to our best ability to tell, but as the second one's claim is rather useless, we prefer the first one: 1"""},
+        {"role":"user","content":"""Class:
+public abstract class CaptchaStrategy {
+
+    protected Context mContext;
+
+    public CaptchaStrategy(Context ctx) {
+        this.mContext = ctx;
+    }
+
+    protected Context getContext() {
+        return mContext;
+    }
+
+    public abstract Path getBlockShape(int blockSize);
+
+    public abstract PositionInfo getBlockPostionInfo(int width, int height, int blockSize);
+
+    public PositionInfo getPositionInfoForSwipeBlock(int width, int height, int blockSize){
+        return getBlockPostionInfo(width,height,blockSize);
+    }
+
+    public abstract Paint getBlockShadowPaint();
+
+    public abstract Paint getBlockBitmapPaint();
+
+    public void decoreateSwipeBlockBitmap(Canvas canvas, Path shape) {
+
+    }
+}
+    Comment 1:
+    /**
+     * Creates an interface for captcha implementations. This is done by creating the CaptchaStrategy abstract class. Implements how to get various aspects of a captcha block.
+     */
+    Comment 2:
+    /**
+     * This class works to provide an interface for implementing catcha placement in mobile apps, leaving many methods to be implemented by inheriting subclasses.
+     * Accordingly, it sets out quite a few methods to be implemented with respect to the captcha block, such as setting the shape and getting the position of the block, with there existing quite a few such methods defined here.
+     */"""},
+        {"role":"assistant","content":"""Feedback:
+    * Naturalness: The language of the first comment is needlessly technical, although it is otherwise accessible. The second comment also uses some technical terminology but presents it in a more naturally readable way, with appropriate explanations: 2
+    * Thoroughness: The first comment fails to discuss the non-block interfaces provided by the class, while the second one describes the kinds of interfaces the class provides in greater detail: 2
+    * Non-Repetitiveness: The first comment needlessly notes how the class provides an interface in two different ways, whereas the second comment is long but not repetitive: 2
+    * Brevity: The first comment remains sufficiently high-level for a reader to quickly understand the purpose of, whereas the second one is needlessly long as a result of fanciful word choices and too much detail: 1
+    * Accuracy: The first comment does not notice how abstract methods are not implemented in Java; meaning that it is not possible for it to implement retrieving these block aspects. The general purpose of the class is still correct in the first comment. The second comment is simply accurate according to our best ability to discern: 2"""},
+        {"role":"user","content":"""Class:
+    """ + items[0][0].cleaned_cs + """
+    Comment 1:
+    """ + items[0][1] + """
+    Comment 2:
+    """ + items[1][1]}]
+    return prompt
 
 def generateJCPromptSPDD(items):
     prompt = [{"role":"system","content":"""
@@ -589,6 +685,75 @@ def generateJFPromptDPSD(items):
     """ + items[1][1] }]
     return prompt
 
+def generateJFPromptDPDD(items):
+    prompt = [{"role":"system","content":"""Given a Java file's class signatures, and their respective method signatures, provide comparative feedback on the following header comments generated to summarize the file's purpose, based on the following criteria:
+    * Naturalness: The generated comment is accessible to human readers and is fluent in its language.
+    * Thoroughness: The generated comment does not omit any important aspect of the file.
+    * Non-Repetitiveness: The generated comment does not repeat information.
+    * Brevity: The generated comment remains brief and does not delve into unnecessary detail.
+    * Accuracy: The generated comment does not contain inaccurate information about the file.
+    Provide your ratings as preferences: On each metric, numerically report either 1 or 2 at the end of your feedback, indicating if you prefer the first or the second comment, respectively. Follow the format from the examples."""},
+        {"role":"user","content":"""Class Signatures:
+    public class MainActivity extends Activity {
+        Method Signatures:
+	    @Override protected void onCreate(Bundle savedInstanceState)         
+	    @Override public boolean onCreateOptionsMenu(Menu menu)         
+	    public void onGifClick(View v)         
+    }
+    Comment 1:
+    /**
+     * This file contains a file that works to track user clicks in order to generate videos from GIFs upon demand. This class will generate the video corresponding to a GIF upon being clicked on.
+     */
+    Comment 2:
+    /**
+     * MainActivity: Click GIF -> Generate Video
+     */"""},
+        {"role":"assistant","content":"""Feedback:
+    * Naturalness: The first comment is very legible and natural in its language; the second comment does not even attempt to bother with sentences, which is not desirable in documentation: 1
+    * Thoroughness: The first comment describes the purpose of the only single class present in the file quite well. The second comment fails to mention the user click tracking aspect: 1
+    * Non-Repetitiveness: The first comment is rather repetitive, describing the same function twice; whereas the second comment has no such issue: 2
+    * Brevity: The first comment is reasonably brief and remains high-level, although it suffers from some repetition, the second comment is even more to the point: 2
+    * Accuracy: The first comment mistakenly calls the class in the file a file. It is otherwise accurate, to our best ability to provide feedback. The second comment is also accurate to the best extent of our understanding, but does not suffer from the same error: 2"""},
+        {"role":"user","content":"""Class Signatures:
+    public class Parser {
+        Method Signatures:
+        public Parser()
+        public boolean parseFilesinHierarchy (UnparsedHierarchy hier)
+        public boolean parseFile (UnparsedFile file)
+        private boolean parseClass (UnparsedChunk class)
+        private boolean parseMethod (UnparsedChunk method)
+        private boolean parseStatement (UnparsedChunk statement)
+    }
+    public class Lexer {
+        Method Signatures:         
+        public Lexer()
+        public boolean lexHierarchy(String rootpath)
+        private boolean lexFile(String filepath)
+    }
+    Comment 1:
+    /**
+     * This file has two classes. Parser: Parses a lexed file in language. Lexer: Lexes a code file in language.
+     */
+    Comment 2:
+    /**
+     * Given a Python file, it provides tools for lexing the file (that is, identifies the tokens in the file, and removes comments and whitespace without semantic meaning) and 
+     * then parsing a lexed file to generate a parse tree for the file. This will then enable a Java compiler to use the parse tree to generate code from the file.
+     * Thus; the file contains tools for the first half of compiling a Java file.
+     */"""},
+        {"role":"assistant","content":"""Feedback:
+    * Naturalness: The first comment is not very natural in its language and structure, choosing to interrupt the flow of language to subdivide the discussion of the file by classes. It fails to provide any higher-level overview. On the other hand, the second comment is written very naturally, providing explanations for all the key technical terms used. It also provides a high level overview of the purpose of the file: 2
+    * Thoroughness: While the first file header mentions both classes and their functions in very basic terms, a lot of important details, such as the choice of language and the purpose of these tools are omitted. There is a lack of high-level details. On the other hand, the second header comment is quite specific in the function of either class and their higher-level purpose: 2
+    * Non-Repetitiveness: The first comment is not repetitive but the second comment contains some redundant information, such as on the parse tree's creation and use: 1
+    * Brevity: The first comment is very brief, the second comment is rather overlong: 1
+    * Accuracy: The first comment does not contain any inaccurate information, to our best ability to tell; whereas the second comment contradicts itself on what language it is compiling: 1"""},
+        {"role":"user","content":"""Class Signatures:
+    """ + "\n".join(["\n".join([c.signature + " {", "      Method Signatures:"] + [m.signature for m in c.methods] + ["}"]) for c in items[0][0].classes]) + """
+    Comment 1:
+    """ + items[0][1] + """
+    Comment 2:
+    """ + items[1][1] }]
+    return prompt
+
 def generateJFPromptSPDD(items):
     prompt = [{"role":"system","content":"""Given a Java file's class signatures, and their respective method signatures, provide feedback on the following header comment generated to summarize the file's purpose, based on the following criteria:
     * Naturalness: The generated comment is accessible to human readers and is fluent in its language.
@@ -668,12 +833,27 @@ def doublePromptSingleDepth(in1,in2):
     #prompts = [generatePrompt(tr) for tr in toRate] # did not work for some reason
     #generations = modelcalls(prompts)
     generations = gptcalls(prompts)
-    pdb.set_trace()
+    #pdb.set_trace()
     metricRatings = [interpretDoubleResults(gen) for gen in generations]
     #for i in range(len(generations)):
     #    if metricRatings[i]=={}:
     #        print(generations[i])
     return metricRatings    
+
+def doublePromptDoubleDepth(in1,in2):
+    toRate = zip(list(in1.items()),list(in2.items()))
+    prompts = list()
+    for tr in toRate:
+        prompts.append(generatePromptDPDD(tr))
+    #prompts = [generatePrompt(tr) for tr in toRate] # did not work for some reason
+    #generations = modelcalls(prompts)
+    generations = gptcalls(prompts)
+    #pdb.set_trace()
+    metricRatings = [interpretDoubleResults(gen) for gen in generations]
+    #for i in range(len(generations)):
+    #    if metricRatings[i]=={}:
+    #        print(generations[i])
+    return metricRatings   
 
 def singularPromptDoubleDepth(inp):
     toRate = list(inp.items())
@@ -714,15 +894,57 @@ def aggregateDoubleRatings(sr):
         agg[r_name].append(agg[r_name][0]/(agg[r_name][0]+agg[r_name][1]))
     return agg
 
-if __name__ == "__main__":
-   inp = pickle.load(open("docs_basic.pkl","rb"))
-   res = singularPromptDoubleDepth(inp)
-   ares = aggregateSingularRatings(res)
-   inp2 = pickle.load(open("docs.pkl","rb"))
+# Should be ordered in parallel and the keys should match
+def compareTwoPKLs(pathTo1,pathTo2):
+   inp1 = pickle.load(open(pathTo1,"rb"))
+   res1 = singularPromptDoubleDepth(inp1)
+   ares1 = aggregateSingularRatings(res1)
+   inp2 = pickle.load(open(pathTo2,"rb"))
    res2 = singularPromptDoubleDepth(inp2)   
    ares2 = aggregateSingularRatings(res2)
-   res3 = doublePromptSingleDepth(inp2,inp)
+   res3 = doublePromptDoubleDepth(inp1,inp2)
    ares3 = aggregateDoubleRatings(res3)
-   pdb.set_trace()
+   res4 = doublePromptDoubleDepth(inp2,inp1)
+   ares4 = aggregateDoubleRatings(res4)
+   bres1 = {k:v[2] for k,v in ares1.items()}
+   bres2 = {k:v[2] for k,v in ares2.items()}
+   bres3 = {k:v[2] for k,v in ares3.items()}
+   bres4 = {k:v[2] for k,v in ares4.items()}
+   #pdb.set_trace()
+   attrs = bres1.keys() &  bres2.keys() &  bres3.keys() &  bres4.keys()
+   resagg = {attr:[bres1[attr],bres2[attr],bres3[attr],bres4[attr]] for attr in attrs}
+   delta = {key:[res[1]-res[0],(res[3]+(1-res[2]))/2] for key,res in resagg.items()}
+   return resagg, delta#(bres1,bres2,bres3,bres4)
 
+if __name__ == "__main__":
+    ress1 = []
+    deltas1 = []
+    ress2 = []
+    deltas2 = []
+
+    common_start = "generations"
+    base1 = "out_baseline"
+    base2 = "out_fullcontext"
+    base3 = "out_CodeLlama"
+    common_end = "docs.pkl"
+     
+    for common_task in ["AnomalyDetection","Captcha","PageRecycler","metazelda"]:
+        taskpath = "outputs_"+common_task
+        path1 = "/".join([common_start,base1,taskpath,common_end])
+        path2 = "/".join([common_start,base2,taskpath,common_end])
+
+        res,delta = compareTwoPKLs(path1,path2)
+        ress1.append(res)
+        deltas1.append(delta)
+        print(delta)
+    for common_task in ["AnomalyDetection","Captcha","PageRecycler","metazelda"]:
+        taskpath = "outputs_"+common_task
+        path3 = "/".join([common_start,base3,taskpath,common_end])
+        path2 = "/".join([common_start,base2,taskpath,common_end])
+
+        res,delta = compareTwoPKLs(path1,path2)
+        ress2.append(res)
+        deltas2.append(delta)
+        print(delta)
+    pdb.set_trace()
         
