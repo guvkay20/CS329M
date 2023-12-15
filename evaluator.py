@@ -49,7 +49,8 @@ def modelcalls(inputs):
     return outputs
     
 def gptcalls(inputs, max_new_toks=500):
-    #pdb.set_trace()
+    pdb.set_trace()
+
     client = OpenAI()
     outputs = list()
     gptcache = pickle.load(open("gptcache.pkl","rb"))
